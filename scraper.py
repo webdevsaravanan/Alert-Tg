@@ -103,7 +103,7 @@ def send_telegram_log(message):
 # ── Main ──────────────────────────────────────────────────
 def main():
     print("🔍 Checking RSS feed for new movies...")
-send_telegram_log("Movie monitor GitHub action run log");
+    send_telegram_log("Movie monitor GitHub action run log")
     current = fetch_rss()
     cached  = load_cache()
 
