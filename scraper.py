@@ -85,9 +85,25 @@ def send_telegram(message):
     except Exception as e:
         print(f"❌ Telegram error: {e}")
 
+def send_telegram_log(message):
+    url = f"https://api.telegram.org/bot5555421412:AAENkGkuh_mCiwutN4Sm4UUDWDQItV-x-Hk/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": False
+    }
+    try:
+        r = requests.post(url, json=payload, timeout=10)
+        r.raise_for_status()
+        print(f"📨 Telegram sent: {message[:60]}...")
+    except Exception as e:
+        print(f"❌ Telegram error: {e}")
+
 # ── Main ──────────────────────────────────────────────────
 def main():
     print("🔍 Checking RSS feed for new movies...")
+send_telegram_log("Movie monitor GitHub action run log");
     current = fetch_rss()
     cached  = load_cache()
 
