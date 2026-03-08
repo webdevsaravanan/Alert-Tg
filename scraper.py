@@ -2,6 +2,7 @@ import requests
 import json
 import os
 import xml.etree.ElementTree as ET
+import re
 
 # ── Config ──────────────────────────────────────────────
 RSS_FEEDS = [
@@ -17,9 +18,9 @@ RSS_FEEDS = [
     },
 ]
 
-TELEGRAM_TOKEN     = "5484293358:AAEYKtkbRMHL7hH1uwitn7wWFt66QAeELuw"
-TELEGRAM_LOG_TOKEN = "5555421412:AAENkGkuh_mCiwutN4Sm4UUDWDQItV-x-Hk"
-TELEGRAM_CHAT_ID   = "885204688"
+TELEGRAM_TOKEN     = os.environ["TELEGRAM_TOKEN"]
+TELEGRAM_LOG_TOKEN = os.environ["TELEGRAM_LOG_TOKEN"]
+TELEGRAM_CHAT_ID   = os.environ["TELEGRAM_CHAT_ID"]
 CACHE_FILE         = "last_movies.json"
 
 HEADERS = {
@@ -29,6 +30,29 @@ HEADERS = {
         "Chrome/120.0.0.0 Safari/537.36"
     )
 }
+
+# ── Image Extractor ──────────────────────────────────────
+def extract_image_url(desc_html: str) -> str | None:
+    """
+    Extract the first ipsImage src from the description HTML.
+    Handles both plain src and src inside CDATA/encoded HTML.
+    """
+    if not desc_html:
+        return None
+
+    # Match <img ... class="ipsImage" ... src="URL"> in any attribute order
+    pattern = r'<img[^>]+class=["\'][^"\']*ipsImage[^"\']*["\'][^>]+src=["\']([^"\']+)["\']'
+    match = re.search(pattern, desc_html, re.IGNORECASE)
+    if match:
+        return match.group(1)
+
+    # Fallback: match src first, class second
+    pattern_alt = r'<img[^>]+src=["\']([^"\']+)["\'][^>]+class=["\'][^"\']*ipsImage[^"\']*["\']'
+    match = re.search(pattern_alt, desc_html, re.IGNORECASE)
+    if match:
+        return match.group(1)
+
+    return None
 
 # ── RSS Fetcher ──────────────────────────────────────────
 def fetch_rss(feed: dict) -> dict:
@@ -64,14 +88,24 @@ def fetch_rss(feed: dict) -> dict:
         date  = item.findtext("pubDate",     "").strip()
         desc  = item.findtext("description", "").strip()
 
+        # Also check for encoded description (common in RSS)
+        if not desc:
+            ns = {"content": "http://purl.org/rss/1.0/modules/content/"}
+            encoded = item.find("content:encoded", ns)
+            if encoded is not None and encoded.text:
+                desc = encoded.text.strip()
+
+        image_url = extract_image_url(desc)
+
         if link:
             movies[link] = {
-                "title":    title,
-                "url":      link,
-                "date":     date,
-                "desc":     desc[:200] if desc else "",
-                "feed":     label,
-                "emoji":    feed["emoji"],
+                "title":     title,
+                "url":       link,
+                "date":      date,
+                "desc":      desc[:200] if desc else "",
+                "feed":      label,
+                "emoji":     feed["emoji"],
+                "image_url": image_url,
             }
 
     return movies
@@ -89,19 +123,62 @@ def save_cache(data: dict):
 
 # ── Telegram ─────────────────────────────────────────────
 def _post_telegram(token: str, chat_id: str, message: str):
+    """Send a plain text/HTML message (no image)."""
     url     = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
-        "chat_id":                chat_id,
-        "text":                   message,
-        "parse_mode":             "HTML",
-        "disable_web_page_preview": False,
+        "chat_id":                  chat_id,
+        "text":                     message,
+        "parse_mode":               "HTML",
+        "disable_web_page_preview": True,
     }
     try:
         r = requests.post(url, json=payload, timeout=10)
         r.raise_for_status()
-        print(f"📨 Telegram sent: {message[:60]}...")
+        print(f"📨 Telegram message sent: {message[:60]}...")
     except Exception as e:
-        print(f"❌ Telegram error: {e}")
+        print(f"❌ Telegram sendMessage error: {e}")
+
+def _post_telegram_photo(token: str, chat_id: str, image_url: str, caption: str):
+    """Send a photo with caption via sendPhoto."""
+    url     = f"https://api.telegram.org/bot{token}/sendPhoto"
+    payload = {
+        "chat_id":    chat_id,
+        "photo":      image_url,
+        "caption":    caption,
+        "parse_mode": "HTML",
+    }
+    try:
+        r = requests.post(url, json=payload, timeout=15)
+        r.raise_for_status()
+        print(f"📸 Telegram photo sent: {caption[:60]}...")
+        return True
+    except Exception as e:
+        print(f"⚠️  Telegram sendPhoto error (falling back to text): {e}")
+        return False
+
+def send_movie_alert(token: str, chat_id: str, info: dict):
+    """
+    Send movie alert with poster image if available,
+    otherwise fall back to a plain text message.
+    """
+    caption = (
+        f"{info['emoji']} <b>New Movie Added!</b>\n\n"
+        f"📂 <i>{info['feed']}</i>\n\n"
+        f"📌 <b>{info['title']}</b>\n"
+        f"📅 {info['date']}\n"
+        f"🔗 <a href='{info['url']}'>View Post</a>"
+    )
+
+    image_url = info.get("image_url")
+
+    if image_url:
+        success = _post_telegram_photo(token, chat_id, image_url, caption)
+        if not success:
+            # Fallback to plain message if photo fails
+            _post_telegram(token, chat_id, caption)
+    else:
+        print(f"🖼️  No image found for: {info['title']}")
+        _post_telegram(token, chat_id, caption)
 
 def send_telegram(message: str):
     _post_telegram(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, message)
@@ -135,14 +212,7 @@ def main():
             total_new += len(new_movies)
 
             for url, info in new_movies.items():
-                msg = (
-                    f"{info['emoji']} <b>New Movie Added!</b>\n\n"
-                    f"📂 <i>{info['feed']}</i>\n\n"
-                    f"📌 <b>{info['title']}</b>\n"
-                    f"📅 {info['date']}\n"
-                    f"🔗 <a href='{info['url']}'>View Post</a>"
-                )
-                send_telegram(msg)
+                send_movie_alert(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, info)
 
     if total_new == 0:
         print("✅ No new movies found across all feeds.")
