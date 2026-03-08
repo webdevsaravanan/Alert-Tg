@@ -1,6 +1,6 @@
 # 🎬 Movie Forum Alert Bot
 
-Monitors the Tamil MV forum and sends Telegram alerts when new movies are added.
+Monitors the  forum and sends Telegram alerts when new movies are added.
 
 ## Setup
 
