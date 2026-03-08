@@ -18,9 +18,9 @@ RSS_FEEDS = [
     },
 ]
 
-TELEGRAM_TOKEN     = os.environ["TELEGRAM_TOKEN"]
-TELEGRAM_LOG_TOKEN = os.environ["TELEGRAM_LOG_TOKEN"]
-TELEGRAM_CHAT_ID   = os.environ["TELEGRAM_CHAT_ID"]
+TELEGRAM_TOKEN     = "5484293358:AAEYKtkbRMHL7hH1uwitn7wWFt66QAeELuw"
+TELEGRAM_LOG_TOKEN = "5555421412:AAENkGkuh_mCiwutN4Sm4UUDWDQItV-x-Hk"
+TELEGRAM_CHAT_ID   = "885204688"
 CACHE_FILE         = "last_movies.json"
 
 HEADERS = {
@@ -122,8 +122,16 @@ def save_cache(data: dict):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 # ── Telegram ─────────────────────────────────────────────
-def _post_telegram(token: str, chat_id: str, message: str):
-    """Send a plain text/HTML message (no image)."""
+def _build_inline_keyboard(post_url: str) -> dict:
+    """Build an inline keyboard with a 'View Post' URL button."""
+    return {
+        "inline_keyboard": [[
+            {"text": "🔗 View Post", "url": post_url}
+        ]]
+    }
+
+def _post_telegram(token: str, chat_id: str, message: str, post_url: str = None):
+    """Send a plain text/HTML message with an optional inline button."""
     url     = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
         "chat_id":                  chat_id,
@@ -131,6 +139,9 @@ def _post_telegram(token: str, chat_id: str, message: str):
         "parse_mode":               "HTML",
         "disable_web_page_preview": True,
     }
+    if post_url:
+        payload["reply_markup"] = _build_inline_keyboard(post_url)
+
     try:
         r = requests.post(url, json=payload, timeout=10)
         r.raise_for_status()
@@ -138,8 +149,8 @@ def _post_telegram(token: str, chat_id: str, message: str):
     except Exception as e:
         print(f"❌ Telegram sendMessage error: {e}")
 
-def _post_telegram_photo(token: str, chat_id: str, image_url: str, caption: str):
-    """Send a photo with caption via sendPhoto."""
+def _post_telegram_photo(token: str, chat_id: str, image_url: str, caption: str, post_url: str = None):
+    """Send a photo with caption and optional inline button via sendPhoto."""
     url     = f"https://api.telegram.org/bot{token}/sendPhoto"
     payload = {
         "chat_id":    chat_id,
@@ -147,6 +158,9 @@ def _post_telegram_photo(token: str, chat_id: str, image_url: str, caption: str)
         "caption":    caption,
         "parse_mode": "HTML",
     }
+    if post_url:
+        payload["reply_markup"] = _build_inline_keyboard(post_url)
+
     try:
         r = requests.post(url, json=payload, timeout=15)
         r.raise_for_status()
@@ -160,25 +174,27 @@ def send_movie_alert(token: str, chat_id: str, info: dict):
     """
     Send movie alert with poster image if available,
     otherwise fall back to a plain text message.
+    'View Post' is rendered as an inline keyboard button.
     """
+    # Remove the link from caption — it's now a button below the message
     caption = (
         f"{info['emoji']} <b>New Movie Added!</b>\n\n"
         f"📂 <i>{info['feed']}</i>\n\n"
         f"📌 <b>{info['title']}</b>\n"
-        f"📅 {info['date']}\n"
-        f"🔗 <a href='{info['url']}'>View Post</a>"
+        f"📅 {info['date']}"
     )
 
+    post_url  = info["url"]
     image_url = info.get("image_url")
 
     if image_url:
-        success = _post_telegram_photo(token, chat_id, image_url, caption)
+        success = _post_telegram_photo(token, chat_id, image_url, caption, post_url)
         if not success:
             # Fallback to plain message if photo fails
-            _post_telegram(token, chat_id, caption)
+            _post_telegram(token, chat_id, caption, post_url)
     else:
         print(f"🖼️  No image found for: {info['title']}")
-        _post_telegram(token, chat_id, caption)
+        _post_telegram(token, chat_id, caption, post_url)
 
 def send_telegram(message: str):
     _post_telegram(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, message)
