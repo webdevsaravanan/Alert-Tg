@@ -292,10 +292,11 @@ def send_movie_alert(token: str, chat_id: str, info: dict):
     magnets  = info.get("magnets", [])
     keyboard = build_inline_keyboard(magnets)
 
-   magnet_line = (
+    magnet_line = (
         f"\n🧲 <b>Download link below ↓</b>"
         if magnets else "\n⚠️ No download link found yet"
     )
+
     # Escape & in title/url for valid HTML
     safe_title = info['title'].replace('&', '&amp;')
     safe_url   = info['url'].replace('&', '&amp;')
