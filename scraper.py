@@ -219,10 +219,10 @@ def build_inline_keyboard(magnets: list) -> dict | None:
         if len(label) > 50:
             label = label[:47] + "…"
 
-        redirect_url = (
-            "https://magnet.link/?"
-            + urllib.parse.urlencode({"magnet": m["url"]})
-        )
+        # Append the magnet URI raw — no extra encoding.
+        # The magnet already has its own percent-encoding (e.g. %20, %5B);
+        # running urlencode() on top would double-encode it and break clients.
+        redirect_url = "https://magnet.link/?magnet=" + m["url"]
         rows.append([{"text": f"🧲 {label}", "url": redirect_url}])
 
     return {"inline_keyboard": rows}
