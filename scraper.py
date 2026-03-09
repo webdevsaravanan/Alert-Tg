@@ -34,20 +34,15 @@ HEADERS = {
 
 # ── Image Extractor ──────────────────────────────────────
 def extract_image_url(desc_html: str) -> str | None:
-    """
-    Extract the first ipsImage src from the description HTML.
-    Handles both plain src and src inside CDATA/encoded HTML.
-    """
+    """Extract the first ipsImage src from the description HTML."""
     if not desc_html:
         return None
 
-    # Match <img ... class="ipsImage" ... src="URL"> in any attribute order
     pattern = r'<img[^>]+class=["\'][^"\']*ipsImage[^"\']*["\'][^>]+src=["\']([^"\']+)["\']'
     match = re.search(pattern, desc_html, re.IGNORECASE)
     if match:
         return match.group(1)
 
-    # Fallback: match src first, class second
     pattern_alt = r'<img[^>]+src=["\']([^"\']+)["\'][^>]+class=["\'][^"\']*ipsImage[^"\']*["\']'
     match = re.search(pattern_alt, desc_html, re.IGNORECASE)
     if match:
@@ -61,19 +56,14 @@ def extract_magnet_links(description: str) -> list:
     """
     Extract all magnet links from a description/HTML string.
     Returns a list of dicts: [{"url": "magnet:?...", "name": "filename"}, ...]
-
     Handles HTML-encoded ampersands (&amp;) automatically.
-    The display name is taken from the magnet's dn= parameter, URL-decoded
-    and cleaned up (site watermark + file extension removed).
     """
-    # Decode common HTML entities so &amp; → & before regex matching
     desc = (description
             .replace("&amp;", "&")
             .replace("&lt;",  "<")
             .replace("&gt;",  ">")
             .replace("&quot;", '"'))
 
-    # Match every magnet URI – stops at whitespace, quotes or HTML tags
     raw_magnets = re.findall(r'magnet:\?[^\s"\'<>\]]+', desc)
 
     results = []
@@ -84,15 +74,11 @@ def extract_magnet_links(description: str) -> list:
             continue
         seen.add(magnet)
 
-        # Pull the dn= (display name) parameter from the magnet URI
         dn_match = re.search(r'[?&]dn=([^&]+)', magnet)
         if dn_match:
             raw_name = dn_match.group(1)
-            # URL-decode %20 etc.; replace + with space
             name = urllib.parse.unquote(raw_name.replace("+", " ")).strip()
-            # Strip "www.sitename.xyz - " watermark prefix
             name = re.sub(r'^www\.\S+?\s+-\s+', '', name)
-            # Remove trailing file extension for a cleaner button label
             name = re.sub(r'\.(mkv|mp4|avi|ts|m2ts)$', '', name, flags=re.IGNORECASE)
         else:
             name = f"Magnet #{len(results) + 1}"
@@ -100,6 +86,44 @@ def extract_magnet_links(description: str) -> list:
         results.append({"url": magnet, "name": name})
 
     return results
+
+
+# ── Magnet Size Filter ───────────────────────────────────
+def extract_size_gb(name: str) -> float | None:
+    """
+    Parse file size from a magnet name string.
+    Handles: 700MB, 400MB, 2.5GB, 1.4GB, 6GB, 4.7GB, etc.
+    Returns size in GB as float, or None if not found.
+    """
+    match = re.search(r'([\d.]+)\s*(MB|GB)', name, re.IGNORECASE)
+    if not match:
+        return None
+    value = float(match.group(1))
+    unit  = match.group(2).upper()
+    return value / 1024 if unit == "MB" else value
+
+
+def pick_best_magnet(magnets: list) -> list:
+    """
+    From all magnets that carry a size in their name:
+      1. Keep only those with size < 4.5 GB
+      2. Return the single entry with the HIGHEST size among those
+
+    This selects the best quality file that is still a reasonable download
+    (e.g. picks 2.5 GB over 700 MB / 400 MB, but skips 6 GB / 4.7 GB).
+    If no magnet has a parseable size under 4.5 GB, returns empty list.
+    """
+    sized = []
+    for m in magnets:
+        size = extract_size_gb(m["name"])
+        if size is not None and size < 4.5:
+            sized.append((size, m))
+
+    if not sized:
+        return []
+
+    best = max(sized, key=lambda x: x[0])
+    return [best[1]]
 
 
 # ── RSS Fetcher ──────────────────────────────────────────
@@ -143,11 +167,12 @@ def fetch_rss(feed: dict) -> dict:
             if encoded is not None and encoded.text:
                 desc = encoded.text.strip()
 
-        image_url = extract_image_url(desc)
-        magnets   = extract_magnet_links(desc)
+        image_url    = extract_image_url(desc)
+        all_magnets  = extract_magnet_links(desc)
+        best_magnets = pick_best_magnet(all_magnets)   # ← filtered list (0 or 1 item)
 
-        if magnets:
-            print(f"   🧲 {len(magnets)} magnet(s) found for: {title[:60]}")
+        if all_magnets:
+            print(f"   🧲 {len(all_magnets)} total → {len(best_magnets)} selected for: {title[:55]}")
 
         if link:
             movies[link] = {
@@ -158,7 +183,7 @@ def fetch_rss(feed: dict) -> dict:
                 "feed":      label,
                 "emoji":     feed["emoji"],
                 "image_url": image_url,
-                "magnets":   magnets,
+                "magnets":   best_magnets,   # only the best one (or empty)
             }
 
     return movies
@@ -181,13 +206,9 @@ def build_inline_keyboard(magnets: list) -> dict | None:
     """
     Build a Telegram InlineKeyboardMarkup from the list of magnet dicts.
 
-    ⚠️  Telegram Bot API does NOT support magnet: URIs as button URLs.
-        We wrap each magnet via https://magnet.link/?magnet=... which is a
-        well-known open redirect that hands the link off to the user's
-        torrent client when tapped.
-
-        Button label is capped at 50 chars to stay within Telegram limits.
-        Each magnet gets its own row so labels never collide.
+    Telegram does not accept magnet: URIs as button URLs, so each link is
+    wrapped via https://magnet.link/?magnet=... (open redirect to torrent client).
+    Button labels are capped at 50 chars.
     """
     if not magnets:
         return None
@@ -207,10 +228,14 @@ def build_inline_keyboard(magnets: list) -> dict | None:
     return {"inline_keyboard": rows}
 
 
-# ── Telegram ─────────────────────────────────────────────
+# ── Telegram Senders ─────────────────────────────────────
 def _post_telegram(token: str, chat_id: str, message: str,
                    reply_markup: dict | None = None):
-    """Send a plain text/HTML message (no image)."""
+    """Send a plain text/HTML message."""
+    # Telegram sendMessage: text max 4096 chars
+    if len(message) > 4096:
+        message = message[:4090] + "…"
+
     url     = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
         "chat_id":                  chat_id,
@@ -219,19 +244,23 @@ def _post_telegram(token: str, chat_id: str, message: str,
         "disable_web_page_preview": True,
     }
     if reply_markup:
-        payload["reply_markup"] = reply_markup
+        payload["reply_markup"] = json.dumps(reply_markup)
 
     try:
         r = requests.post(url, json=payload, timeout=10)
         r.raise_for_status()
         print(f"📨 Telegram message sent: {message[:60]}...")
     except Exception as e:
-        print(f"❌ Telegram sendMessage error: {e}")
+        print(f"❌ Telegram sendMessage error: {e} | response: {r.text[:300]}")
 
 
 def _post_telegram_photo(token: str, chat_id: str, image_url: str,
-                         caption: str, reply_markup: dict | None = None):
-    """Send a photo with caption (and optional inline keyboard) via sendPhoto."""
+                         caption: str, reply_markup: dict | None = None) -> bool:
+    """Send a photo with caption and optional inline keyboard via sendPhoto."""
+    # Telegram sendPhoto: caption max 1024 chars
+    if len(caption) > 1024:
+        caption = caption[:1020] + "…"
+
     url     = f"https://api.telegram.org/bot{token}/sendPhoto"
     payload = {
         "chat_id":    chat_id,
@@ -240,7 +269,7 @@ def _post_telegram_photo(token: str, chat_id: str, image_url: str,
         "parse_mode": "HTML",
     }
     if reply_markup:
-        payload["reply_markup"] = reply_markup
+        payload["reply_markup"] = json.dumps(reply_markup)
 
     try:
         r = requests.post(url, json=payload, timeout=15)
@@ -248,31 +277,35 @@ def _post_telegram_photo(token: str, chat_id: str, image_url: str,
         print(f"📸 Telegram photo sent: {caption[:60]}...")
         return True
     except Exception as e:
-        print(f"⚠️  Telegram sendPhoto error (falling back to text): {e}")
+        print(f"⚠️  Telegram sendPhoto error (falling back to text): {e} | response: {r.text[:300]}")
         return False
 
 
 def send_movie_alert(token: str, chat_id: str, info: dict):
     """
-    Send movie alert with:
-      • Poster image (if available)
-      • Inline keyboard buttons — one per magnet link
-    Falls back to plain text if the photo send fails.
+    Send a movie alert:
+      • Photo + caption  (if poster image is available)
+      • Inline keyboard buttons, one per selected magnet
+      • Falls back to plain text if the photo send fails
     """
     magnets  = info.get("magnets", [])
     keyboard = build_inline_keyboard(magnets)
 
     magnet_line = (
-        f"\n🧲 <b>{len(magnets)} download link(s) below ↓</b>"
-        if magnets else ""
+        f"\n🧲 <b>Download link below ↓</b>"
+        if magnets else "\n⚠️ No download link found yet"
     )
+
+    # Escape & in title/url for valid HTML
+    safe_title = info['title'].replace('&', '&amp;')
+    safe_url   = info['url'].replace('&', '&amp;')
 
     caption = (
         f"{info['emoji']} <b>New Movie Added!</b>\n\n"
         f"📂 <i>{info['feed']}</i>\n\n"
-        f"📌 <b>{info['title']}</b>\n"
+        f"📌 <b>{safe_title}</b>\n"
         f"📅 {info['date']}\n"
-        f"🔗 <a href='{info['url']}'>View Post</a>"
+        f"🔗 <a href='{safe_url}'>View Post</a>"
         f"{magnet_line}"
     )
 
@@ -282,7 +315,6 @@ def send_movie_alert(token: str, chat_id: str, info: dict):
         success = _post_telegram_photo(token, chat_id, image_url, caption,
                                        reply_markup=keyboard)
         if not success:
-            # Fallback to plain message if photo fails
             _post_telegram(token, chat_id, caption, reply_markup=keyboard)
     else:
         print(f"🖼️  No image found for: {info['title']}")
@@ -327,7 +359,6 @@ def main():
     if total_new == 0:
         print("✅ No new movies found across all feeds.")
 
-    # Merge cached + all current and save
     merged = {**cached, **all_current}
     save_cache(merged)
     print(f"💾 Cache updated with {len(merged)} total movies.")
