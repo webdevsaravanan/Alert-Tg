@@ -223,7 +223,7 @@ def build_inline_keyboard(magnets: list) -> dict | None:
         # Append the magnet URI raw — no extra encoding.
         # The magnet already has its own percent-encoding (e.g. %20, %5B);
         # running urlencode() on top would double-encode it and break clients.
-        redirect_url = "https://magnet.link/?magnet=" + m["url"]
+        redirect_url = "https://seedrproxy.mvcollection.workers.dev/magnet?link=" + m["url"]
         rows.append([{"text": f"🧲 {label}", "url": redirect_url}])
 
     return {"inline_keyboard": rows}
