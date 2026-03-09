@@ -215,9 +215,10 @@ def build_inline_keyboard(magnets: list) -> dict | None:
 
     rows = []
     for m in magnets:
-        label = m["name"]
-        if len(label) > 50:
-            label = label[:47] + "…"
+        # Use the file size as the button label (e.g. "1.9GB", "700MB").
+        # Fall back to a short slice of the full name if no size is found.
+        size_match = re.search(r'([\d.]+\s*(?:MB|GB))', m["name"], re.IGNORECASE)
+        label = size_match.group(1).strip() if size_match else m["name"][:30]
 
         # Append the magnet URI raw — no extra encoding.
         # The magnet already has its own percent-encoding (e.g. %20, %5B);
@@ -292,7 +293,6 @@ def send_movie_alert(token: str, chat_id: str, info: dict):
     keyboard = build_inline_keyboard(magnets)
 
     magnet_line = (
-        f"\n🧲 <b>Download link below ↓</b>"
         if magnets else "\n⚠️ No download link found yet"
     )
 
