@@ -17,6 +17,11 @@ RSS_FEEDS = [
         "label": "🎥 PreDVD / DVDSCR / CAM / TC",
         "emoji": "🟡"
     },
+{
+        "url": "https://www.1tamilmv.army/index.php?/forums/forum/19-web-series-tv-shows.xml/",
+        "label": "🎥 WEB-SERIES / TV SHOWS",
+        "emoji": "🟠"
+    },
 ]
 
 TELEGRAM_TOKEN     = os.environ["TELEGRAM_TOKEN"]
