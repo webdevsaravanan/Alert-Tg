@@ -22,6 +22,21 @@ RSS_FEEDS = [
         "label": "🎥 WEB-SERIES / TV SHOWS",
         "emoji": "🟠"
     },
+{
+        "url": "https://www.1tamilmv.army/index.php?/forums/forum/12-hd-rips-dvd-rips-br-rips.xml/",
+        "label": "🎥 HD-Rips / DVD-Rips / BR-Rips",
+        "emoji": "⚪"
+    },
+{
+        "url": "https://www.1tamilmv.army/index.php?/forums/forum/36-web-hd-itunes-hd-bluray.xml/",
+        "label": "🎥 Malayalam / WEB-HD / iTunes-HD / BluRay",
+        "emoji": "🟣"
+    },
+{
+        "url": "https://www.1tamilmv.army/index.php?/forums/forum/49-web-hd-itunes-hd-bluray.xml/",
+        "label": "🎥 Hollywood / WEB-HD / iTunes-HD / BluRay",
+        "emoji": "🟢"
+    },
 ]
 
 TELEGRAM_TOKEN     = os.environ["TELEGRAM_TOKEN"]
