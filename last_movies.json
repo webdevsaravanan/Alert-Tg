@@ -10161,6 +10161,11 @@
     "feed": "🎬 Web-HD / iTunes / BluRay",
     "emoji": "🔵",
     "image_url": null,
-    "magnets": []
+    "magnets": [
+      {
+        "url": "magnet:?xt=urn:btih:55a94fcff0d6830a08ebfe904f8d57ba84a011a0&dn=www.1TamilMV.cymru%20-%20Eesha%20%282025%29%20Tamil%20TRUE%20WEB-DL%20-%201080p%20-%20AVC%20-%20%28DD%2B5.1%20-%20640Kbps%20%26%20AAC%29%20-%202.5GB%20-%20ESub.mkv&xl=2773511644&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=udp%3A%2F%2Ftracker.dler.org%3A6969%2Fannounce&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce&tr=udp%3A%2F%2Fopen.demonii.com%3A1337%2Fannounce&tr=https%3A%2F%2Ftracker.moeblog.cn%3A443%2Fannounce&tr=udp%3A%2F%2Fopen.dstud.io%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.srv00.com%3A6969%2Fannounce&tr=https%3A%2F%2Ftracker.zhuqiy.com%3A443%2Fannounce&tr=https%3A%2F%2Ftracker.pmman.tech%3A443%2Fannounce",
+        "name": "Eesha (2025) Tamil TRUE WEB-DL - 1080p - AVC - (DD+5.1 - 640Kbps & AAC) - 2.5GB - ESub"
+      }
+    ]
   }
 }
